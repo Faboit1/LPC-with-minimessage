@@ -24,6 +24,9 @@ import java.util.Map;
  */
 public final class EmojiReplacer {
 
+    /** Shown on the glyph when the config does not say otherwise. */
+    private static final String DEFAULT_HOVER_TEXT = "<gray><code>";
+
     private final LPC plugin;
     private volatile boolean enabled;
     private volatile boolean requirePermission;
@@ -38,7 +41,9 @@ public final class EmojiReplacer {
     public void reload() {
         this.enabled = plugin.getConfig().getBoolean("emoji.enabled", true);
         this.requirePermission = plugin.getConfig().getBoolean("emoji.require-permission", false);
-        this.hoverText = plugin.getConfig().getString("emoji.hover-text", "");
+        // Defaults to on: a config written before this option existed has no such key, and the
+        // hover is the whole point of the feature. Set it to "" to turn it off.
+        this.hoverText = plugin.getConfig().getString("emoji.hover-text", DEFAULT_HOVER_TEXT);
         Map<String, String> map = new LinkedHashMap<>();
         ConfigurationSection section = plugin.getConfig().getConfigurationSection("emoji.replacements");
         if (section != null) {

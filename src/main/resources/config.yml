@@ -82,8 +82,8 @@ emoji:
   # When true, only players with 'lpc.emoji' get emoji replacement.
   require-permission: false
   # Hover shown on the inserted glyph, so readers can see how it was typed. <code> becomes the
-  # shortcut it replaced (e.g. ':heart:'). Leave empty for no hover. Paper only - the Spigot chat
-  # event has nowhere to attach one.
+  # shortcut it replaced (e.g. ':heart:'). Set to "" for no hover. Paper only - the Spigot chat
+  # event has nowhere to attach one. Applies to configs written before this option existed too.
   hover-text: "<gray><code>"
   replacements:
     ":heart:": "❤"
