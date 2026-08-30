@@ -11,11 +11,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * Gates chat messages on the async thread before rendering. Bundles mute, anti-spam cooldown,
- * repeat blocking, caps, profanity and anti-advert filters behind one {@link #process} call that
- * returns {@link ModResult} (ALLOW / BLOCK / TRANSFORM).
+ * repeat blocking, character whitelisting, caps, profanity and anti-advert filters behind one
+ * {@link #process} call that returns {@link ModResult} (ALLOW / BLOCK / TRANSFORM).
  *
  * <p>Operates only on pre-parse raw plaintext via {@link TextChecks}; it never builds a component
  * from player text or invokes the trusted MiniMessage parser / PlaceholderAPI on player content.
@@ -37,6 +39,10 @@ public final class ModerationService {
     private volatile boolean repeatEnabled;
     private volatile long repeatExpiryMillis;
     private volatile String repeatMessage;
+    private volatile boolean charactersEnabled;
+    private volatile Pattern allowedCharacters;
+    private volatile boolean charactersBlock;
+    private volatile String charactersMessage;
     private volatile boolean capsEnabled;
     private volatile int capsMinLength;
     private volatile double capsMaxRatio;
@@ -72,6 +78,12 @@ public final class ModerationService {
         this.repeatEnabled = config.getBoolean("repeat-filter.enabled", true);
         this.repeatExpiryMillis = config.getLong("repeat-filter.expiry-millis", 30_000);
         this.repeatMessage = config.getString("repeat-filter.message", "<red>Please don't repeat the same message.");
+
+        this.charactersEnabled = config.getBoolean("character-filter.enabled", false);
+        this.allowedCharacters = compileAllowed(config.getString("character-filter.allowed-characters", DEFAULT_ALLOWED));
+        this.charactersBlock = !"STRIP".equalsIgnoreCase(config.getString("character-filter.action", "BLOCK"));
+        this.charactersMessage = config.getString("character-filter.message",
+                "<red>That character isn't allowed in chat: <yellow><character></yellow>");
 
         this.capsEnabled = config.getBoolean("caps-filter.enabled", true);
         this.capsMinLength = config.getInt("caps-filter.min-length", 8);
@@ -133,6 +145,22 @@ public final class ModerationService {
 
         String text = raw;
 
+        // Runs before the other text filters so they only ever see characters the server permits.
+        if (charactersEnabled && !player.hasPermission("lpc.bypass.characters")) {
+            int refused = TextChecks.firstDisallowed(text, allowedCharacters);
+            if (refused >= 0) {
+                if (charactersBlock) {
+                    return ModResult.block(notice(charactersMessage, "character",
+                            new String(Character.toChars(refused))));
+                }
+                text = TextChecks.stripDisallowed(text, allowedCharacters);
+                if (text.isBlank()) {
+                    return ModResult.block(notice(charactersMessage, "character",
+                            new String(Character.toChars(refused))));
+                }
+            }
+        }
+
         if (capsEnabled && !player.hasPermission("lpc.bypass.caps")
                 && TextChecks.isShout(text, capsMinLength, capsMaxRatio)) {
             if (capsBlock) {
@@ -158,6 +186,20 @@ public final class ModerationService {
         }
 
         return text.equals(raw) ? ModResult.allow() : ModResult.transform(text);
+    }
+
+    /** Printable ASCII: the range the default Minecraft font is guaranteed to render. */
+    private static final String DEFAULT_ALLOWED = "[\\x20-\\x7E]";
+
+    /** Falls back to printable ASCII when an admin's regex does not compile, rather than failing. */
+    private Pattern compileAllowed(String expression) {
+        try {
+            return Pattern.compile(expression == null || expression.isEmpty() ? DEFAULT_ALLOWED : expression);
+        } catch (PatternSyntaxException invalid) {
+            plugin.getLogger().warning("character-filter.allowed-characters is not a valid regular expression ("
+                    + invalid.getDescription() + ") - falling back to printable ASCII.");
+            return Pattern.compile(DEFAULT_ALLOWED);
+        }
     }
 
     private static Component notice(String raw) {
