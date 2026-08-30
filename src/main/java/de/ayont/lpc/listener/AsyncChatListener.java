@@ -45,6 +45,10 @@ public class AsyncChatListener implements Listener {
         String effectiveRaw = moderation.action() == ModResult.Action.TRANSFORM ? moderation.text() : raw;
         plugin.maybeItemPlaceholderHint(player, effectiveRaw);
 
+        // Drop viewers whose /showchatfrom setting does not want this speaker. Non-player
+        // audiences - the console, most notably - are left alone.
+        event.viewers().removeIf(viewer -> viewer instanceof Player watcher && !plugin.maySee(player, watcher));
+
         boolean allowColor = player.hasPermission("lpc.chatcolor");
         Component base = service.messageComponent(effectiveRaw, allowColor);
         base = plugin.getEmojiReplacer().apply(player, base);
@@ -52,7 +56,7 @@ public class AsyncChatListener implements Listener {
 
         MentionService.Result mention = plugin.getMentionService()
                 .highlight(base, MentionService.onlineNames(plugin.getServer().getOnlinePlayers()));
-        plugin.getMentionService().pingAll(mention.mentioned(), player.getName());
+        plugin.getMentionService().pingAll(mention.mentioned(), player);
 
         Component finalMessage = mention.message();
         Component displayName = plugin.displayNameOf(player);

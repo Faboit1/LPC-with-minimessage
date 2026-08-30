@@ -46,6 +46,9 @@ public class SpigotChatListener implements Listener {
         String effectiveRaw = moderation.action() == ModResult.Action.TRANSFORM ? moderation.text() : event.getMessage();
         plugin.maybeItemPlaceholderHint(player, effectiveRaw);
 
+        // Drop recipients whose /showchatfrom setting does not want this speaker.
+        event.getRecipients().removeIf(watcher -> !plugin.maySee(player, watcher));
+
         boolean allowColor = player.hasPermission("lpc.chatcolor");
         Component base = service.messageComponent(effectiveRaw, allowColor);
         base = plugin.getEmojiReplacer().apply(player, base);
@@ -53,7 +56,7 @@ public class SpigotChatListener implements Listener {
 
         MentionService.Result mention = plugin.getMentionService()
                 .highlight(base, MentionService.onlineNames(plugin.getServer().getOnlinePlayers()));
-        plugin.getMentionService().pingAll(mention.mentioned(), player.getName());
+        plugin.getMentionService().pingAll(mention.mentioned(), player);
 
         Component rendered = service.render(player, mention.message(), plugin.displayNameOf(player));
         rendered = ItemPlaceholder.apply(plugin, player, rendered, false);
