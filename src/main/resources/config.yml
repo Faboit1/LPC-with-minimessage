@@ -25,6 +25,32 @@
 # Main chat format.
 chat-format: "{prefix}{name}<dark_gray> »<reset> {message}"
 
+# ─────────────────────────────────────────────────────────────────────────
+#  Conditions — make a format change itself based on a placeholder.
+#  Declare a named test here, then use %condition:<name>% in any format.
+#  Full guide with more examples: CONDITIONS.md
+#
+#  Operators:  =  !=  |-(contains)  >  >=  <  <=  and  permission:<node>
+#  type: ALL (every line must pass, the default) or ANY (at least one)
+#  'yes'/'no' default to empty, so you can leave one out.
+#
+#  Text comparison is case-sensitive. A non-numeric side makes a numeric
+#  comparison false rather than an error, so a missing placeholder cannot
+#  break the whole format. Needs PlaceholderAPI for %placeholders% to resolve.
+# ─────────────────────────────────────────────────────────────────────────
+conditions:
+#  example:
+#    type: ALL
+#    conditions:
+#      - "%player_world%=world_nether"
+#      - "%vault_eco_balance%>=1000"
+#    yes: "<red>[NETHER RICH] "
+#    no: ""
+#  staff:
+#    conditions:
+#      - "permission:group.staff"
+#    yes: "<red>[STAFF] "
+
 # Per-group formats (optional). Remove the leading '#' to enable.
 group-formats:
 #  default: "<gray>[User]</gray> {name}<dark_gray> »<reset> {message}"

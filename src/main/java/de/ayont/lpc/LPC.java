@@ -11,6 +11,7 @@ import de.ayont.lpc.chat.UrlLinkifier;
 import de.ayont.lpc.commands.AllowMentionsCommand;
 import de.ayont.lpc.commands.LPCCommand;
 import de.ayont.lpc.commands.ShowChatFromCommand;
+import de.ayont.lpc.condition.ConditionService;
 import de.ayont.lpc.listener.AsyncChatListener;
 import de.ayont.lpc.listener.ConnectionListener;
 import de.ayont.lpc.listener.SpigotChatListener;
@@ -46,6 +47,7 @@ public final class LPC extends JavaPlugin {
     private EmojiReplacer emojiReplacer;
     private UrlLinkifier urlLinkifier;
     private MentionService mentionService;
+    private ConditionService conditionService;
     private ChatPreferences chatPreferences;
     private FriendSystemHook friendSystemHook;
 
@@ -59,6 +61,8 @@ public final class LPC extends JavaPlugin {
         this.paper = detectPaper();
         this.folia = detectFolia();
         this.scheduler = Schedulers.create(this);
+        // Built before the format service, which calls into it on every rendered line.
+        this.conditionService = new ConditionService(this);
         this.chatFormatService = new ChatFormatService(this);
         this.muteService = new MuteService(this);
         this.moderationService = new ModerationService(this, muteService);
@@ -68,6 +72,9 @@ public final class LPC extends JavaPlugin {
         this.chatPreferences = new ChatPreferences(this);
         this.friendSystemHook = new FriendSystemHook(this);
         logFriendSystemHook();
+        if (!conditionService.isEmpty()) {
+            getLogger().info("Loaded " + conditionService.size() + " condition(s) for %condition:name% tokens.");
+        }
         registerCommand();
         registerListeners();
         startUpdateChecker();
@@ -182,6 +189,10 @@ public final class LPC extends JavaPlugin {
         return chatFormatService;
     }
 
+    public ConditionService getConditionService() {
+        return conditionService;
+    }
+
     public ModerationService getModerationService() {
         return moderationService;
     }
@@ -204,6 +215,7 @@ public final class LPC extends JavaPlugin {
 
     /** Re-reads config-derived state for every service. Call after {@code reloadConfig()}. */
     public void reloadServices() {
+        conditionService.reload();
         chatFormatService.reload();
         muteService.reload();
         moderationService.reload();

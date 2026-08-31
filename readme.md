@@ -196,3 +196,9 @@ Requires JDK 25.
 ## 📄 License
 
 Released under the [MIT License](LICENSE) — matching the license declared on Modrinth.
+
+## Conditions
+
+Formats can change themselves based on placeholder values, in the style of TAB's conditional
+placeholders: declare a named test under `conditions:` and use `%condition:name%` in any format.
+See [CONDITIONS.md](CONDITIONS.md).
