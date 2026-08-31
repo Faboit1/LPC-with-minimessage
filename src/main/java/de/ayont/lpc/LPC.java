@@ -67,6 +67,7 @@ public final class LPC extends JavaPlugin {
         this.mentionService = new MentionService(this);
         this.chatPreferences = new ChatPreferences(this);
         this.friendSystemHook = new FriendSystemHook(this);
+        logFriendSystemHook();
         registerCommand();
         registerListeners();
         startUpdateChecker();
@@ -122,6 +123,17 @@ public final class LPC extends JavaPlugin {
         }
         if (scheduler != null) {
             scheduler.cancelAll();
+        }
+    }
+
+    /** Makes the state of the optional FriendSystem hook visible at startup, not just in-game. */
+    private void logFriendSystemHook() {
+        if (friendSystemHook.isAvailable()) {
+            getLogger().info("Hooked into " + FriendSystemHook.PLUGIN_NAME
+                    + " - the 'friends' option of /showchatfrom and /allowmentions is active.");
+        } else {
+            getLogger().info(FriendSystemHook.PLUGIN_NAME + " not found - the 'friends' option of "
+                    + "/showchatfrom and /allowmentions will keep showing all chat.");
         }
     }
 
