@@ -148,4 +148,51 @@ public final class TextChecks {
         }
         return false;
     }
+
+    /**
+     * Finds the first character a whitelist refuses.
+     *
+     * <p>Servers usually want this to stop players pasting symbols the vanilla font cannot draw —
+     * box-drawing characters, combining marks stacked into "zalgo" text, or right-to-left overrides
+     * used to scramble a line. Rather than trying to enumerate those, the rule is written the other
+     * way round: {@code allowed} matches the characters that ARE permitted, and anything outside it
+     * is refused.</p>
+     *
+     * <p>Iteration is by code point, so a character outside the basic plane counts once and a
+     * surrogate half is never tested on its own.</p>
+     *
+     * @return the offending code point, or {@code -1} when every character is allowed
+     */
+    public static int firstDisallowed(String text, Pattern allowed) {
+        if (text == null || allowed == null) {
+            return -1;
+        }
+        int index = 0;
+        while (index < text.length()) {
+            int codePoint = text.codePointAt(index);
+            if (!allowed.matcher(new String(Character.toChars(codePoint))).matches()) {
+                return codePoint;
+            }
+            index += Character.charCount(codePoint);
+        }
+        return -1;
+    }
+
+    /** Removes every character the whitelist refuses, leaving the rest untouched. */
+    public static String stripDisallowed(String text, Pattern allowed) {
+        if (text == null || allowed == null) {
+            return text;
+        }
+        StringBuilder kept = new StringBuilder(text.length());
+        int index = 0;
+        while (index < text.length()) {
+            int codePoint = text.codePointAt(index);
+            String character = new String(Character.toChars(codePoint));
+            if (allowed.matcher(character).matches()) {
+                kept.append(character);
+            }
+            index += Character.charCount(codePoint);
+        }
+        return kept.toString();
+    }
 }

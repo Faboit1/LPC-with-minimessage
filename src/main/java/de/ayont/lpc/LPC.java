@@ -1,14 +1,21 @@
 package de.ayont.lpc;
 
 import de.ayont.lpc.chat.ChatFormatService;
+import de.ayont.lpc.chat.ChatPreferences;
+import de.ayont.lpc.chat.ChatVisibility;
 import de.ayont.lpc.chat.EmojiReplacer;
+import de.ayont.lpc.chat.MentionPolicy;
 import de.ayont.lpc.chat.ItemPlaceholder;
 import de.ayont.lpc.chat.MentionService;
 import de.ayont.lpc.chat.UrlLinkifier;
+import de.ayont.lpc.commands.AllowMentionsCommand;
 import de.ayont.lpc.commands.LPCCommand;
+import de.ayont.lpc.commands.ShowChatFromCommand;
+import de.ayont.lpc.condition.ConditionService;
 import de.ayont.lpc.listener.AsyncChatListener;
 import de.ayont.lpc.listener.ConnectionListener;
 import de.ayont.lpc.listener.SpigotChatListener;
+import de.ayont.lpc.integration.FriendSystemHook;
 import de.ayont.lpc.moderation.ModerationService;
 import de.ayont.lpc.moderation.MuteService;
 import de.ayont.lpc.scheduler.Scheduler;
@@ -40,6 +47,9 @@ public final class LPC extends JavaPlugin {
     private EmojiReplacer emojiReplacer;
     private UrlLinkifier urlLinkifier;
     private MentionService mentionService;
+    private ConditionService conditionService;
+    private ChatPreferences chatPreferences;
+    private FriendSystemHook friendSystemHook;
 
     public static LegacyComponentSerializer getLegacySerializer() {
         return LEGACY_SERIALIZER;
@@ -51,12 +61,20 @@ public final class LPC extends JavaPlugin {
         this.paper = detectPaper();
         this.folia = detectFolia();
         this.scheduler = Schedulers.create(this);
+        // Built before the format service, which calls into it on every rendered line.
+        this.conditionService = new ConditionService(this);
         this.chatFormatService = new ChatFormatService(this);
         this.muteService = new MuteService(this);
         this.moderationService = new ModerationService(this, muteService);
         this.emojiReplacer = new EmojiReplacer(this);
         this.urlLinkifier = new UrlLinkifier(this);
         this.mentionService = new MentionService(this);
+        this.chatPreferences = new ChatPreferences(this);
+        this.friendSystemHook = new FriendSystemHook(this);
+        logFriendSystemHook();
+        if (!conditionService.isEmpty()) {
+            getLogger().info("Loaded " + conditionService.size() + " condition(s) for %condition:name% tokens.");
+        }
         registerCommand();
         registerListeners();
         startUpdateChecker();
@@ -106,13 +124,73 @@ public final class LPC extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (chatPreferences != null) {
+            // Written inline: the scheduler will not accept new work while disabling.
+            chatPreferences.save();
+        }
         if (scheduler != null) {
             scheduler.cancelAll();
         }
     }
 
+    /** Makes the state of the optional FriendSystem hook visible at startup, not just in-game. */
+    private void logFriendSystemHook() {
+        if (friendSystemHook.isAvailable()) {
+            getLogger().info("Hooked into " + FriendSystemHook.PLUGIN_NAME
+                    + " - the 'friends' option of /showchatfrom and /allowmentions is active.");
+        } else {
+            getLogger().info(FriendSystemHook.PLUGIN_NAME + " not found - the 'friends' option of "
+                    + "/showchatfrom and /allowmentions will keep showing all chat.");
+        }
+    }
+
+    public ChatPreferences getChatPreferences() {
+        return chatPreferences;
+    }
+
+    public FriendSystemHook getFriendSystemHook() {
+        return friendSystemHook;
+    }
+
+    /**
+     * Whether {@code viewer} wants to see {@code speaker}'s public chat, per their
+     * {@code /showchatfrom} setting. A player always sees their own messages.
+     */
+    public boolean maySee(Player speaker, Player viewer) {
+        java.util.UUID watching = viewer.getUniqueId();
+        if (watching.equals(speaker.getUniqueId())) {
+            return true;
+        }
+        return switch (chatPreferences.visibility(watching)) {
+            case EVERYONE -> true;
+            case NONE -> false;
+            // Friends-only, but nothing can answer "are these two friends?" - show the message
+            // rather than silently cutting the player off from chat entirely.
+            case FRIENDS -> !Boolean.FALSE.equals(
+                    friendSystemHook.friendship(watching, speaker.getUniqueId()));
+        };
+    }
+
+    /** Whether {@code mentioned}'s {@code /allowmentions} setting lets {@code speaker} ping them. */
+    public boolean mayMention(Player mentioned, Player speaker) {
+        if (mentioned.getUniqueId().equals(speaker.getUniqueId())) {
+            return false;
+        }
+        return switch (chatPreferences.mentions(mentioned.getUniqueId())) {
+            case ALL -> true;
+            case NOBODY -> false;
+            // Same fallback as /showchatfrom: when nothing can answer, let the mention through.
+            case FRIENDS -> !Boolean.FALSE.equals(
+                    friendSystemHook.friendship(mentioned.getUniqueId(), speaker.getUniqueId()));
+        };
+    }
+
     public ChatFormatService getChatFormatService() {
         return chatFormatService;
+    }
+
+    public ConditionService getConditionService() {
+        return conditionService;
     }
 
     public ModerationService getModerationService() {
@@ -137,6 +215,7 @@ public final class LPC extends JavaPlugin {
 
     /** Re-reads config-derived state for every service. Call after {@code reloadConfig()}. */
     public void reloadServices() {
+        conditionService.reload();
         chatFormatService.reload();
         muteService.reload();
         moderationService.reload();
@@ -177,6 +256,21 @@ public final class LPC extends JavaPlugin {
             return;
         }
         LPCCommand executor = new LPCCommand(this);
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
+
+        bind("showchatfrom", new ShowChatFromCommand(this));
+        bind("allowmentions", new AllowMentionsCommand(this));
+    }
+
+    /** Attaches one of the per-player chat setting commands, if plugin.yml declares it. */
+    private <T extends org.bukkit.command.CommandExecutor & org.bukkit.command.TabCompleter> void bind(
+            String name, T executor) {
+        PluginCommand command = getCommand(name);
+        if (command == null) {
+            getLogger().warning("Command '" + name + "' is missing from plugin.yml; it is unavailable.");
+            return;
+        }
         command.setExecutor(executor);
         command.setTabCompleter(executor);
     }

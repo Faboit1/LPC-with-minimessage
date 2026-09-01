@@ -1,6 +1,7 @@
 package de.ayont.lpc.chat;
 
 import de.ayont.lpc.LPC;
+import de.ayont.lpc.condition.ConditionService;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -139,6 +140,10 @@ public final class ChatFormatService {
 
         format = applyMetaTokens(format, source, metaData, safeDisplayName);
 
+        // Conditions resolve before PlaceholderAPI so placeholders inside a condition's yes/no
+        // text are still expanded by the pass below.
+        format = plugin.getConditionService().apply(source, format);
+
         if (hasPapi) {
             format = PlaceholderAPI.setPlaceholders(source, format);
         }
@@ -155,6 +160,7 @@ public final class ChatFormatService {
         CachedMetaData metaData = luckPerms.getPlayerAdapter(Player.class).getMetaData(player);
         Component safeDisplayName = displayName != null ? displayName : Component.text(player.getName());
         String format = applyMetaTokens(template, player, metaData, safeDisplayName);
+        format = plugin.getConditionService().apply(player, format);
         if (hasPapi) {
             format = PlaceholderAPI.setPlaceholders(player, format);
         }

@@ -5,13 +5,24 @@ api-version: '${apiVersion}'
 folia-supported: true
 authors: [Ayont, Veylor-Development]
 depend: [LuckPerms]
-softdepend: [PlaceholderAPI]
+softdepend: [ PlaceholderAPI, FriendSystem ]
 description: Flexible MiniMessage chat formatter for LuckPerms (Minecraft 26.2 / Java 25 / Adventure 5)
 website: https://modrinth.com/plugin/lpc-chat
 commands:
   lpc:
     description: LPC chat formatter commands.
     usage: "Usage: /lpc <reload|version|help>"
+  showchatfrom:
+    description: Choose whose public chat you see.
+    usage: "/showchatfrom <everyone|friends|none>"
+    aliases: [ scf ]
+    permission: lpc.showchatfrom
+  allowmentions:
+    description: Choose who may mention you in chat.
+    usage: "/allowmentions <friends|all|nobody>"
+    aliases: [ mentions ]
+    permission: lpc.allowmentions
+
 permissions:
   lpc.reload:
     description: Allows reloading the LPC configuration.
@@ -54,4 +65,13 @@ permissions:
     default: op
   lpc.bypass.advert:
     description: Bypass the anti-advertising filter.
+    default: op
+  lpc.showchatfrom:
+    description: Allows use of /showchatfrom
+    default: true
+  lpc.allowmentions:
+    description: Allows use of /allowmentions
+    default: true
+  lpc.bypass.characters:
+    description: Exempts a player from the chat character filter
     default: op

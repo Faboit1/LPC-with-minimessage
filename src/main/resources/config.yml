@@ -25,6 +25,32 @@
 # Main chat format.
 chat-format: "{prefix}{name}<dark_gray> »<reset> {message}"
 
+# ─────────────────────────────────────────────────────────────────────────
+#  Conditions — make a format change itself based on a placeholder.
+#  Declare a named test here, then use %condition:<name>% in any format.
+#  Full guide with more examples: CONDITIONS.md
+#
+#  Operators:  =  !=  |-(contains)  >  >=  <  <=  and  permission:<node>
+#  type: ALL (every line must pass, the default) or ANY (at least one)
+#  'yes'/'no' default to empty, so you can leave one out.
+#
+#  Text comparison is case-sensitive. A non-numeric side makes a numeric
+#  comparison false rather than an error, so a missing placeholder cannot
+#  break the whole format. Needs PlaceholderAPI for %placeholders% to resolve.
+# ─────────────────────────────────────────────────────────────────────────
+conditions:
+#  example:
+#    type: ALL
+#    conditions:
+#      - "%player_world%=world_nether"
+#      - "%vault_eco_balance%>=1000"
+#    yes: "<red>[NETHER RICH] "
+#    no: ""
+#  staff:
+#    conditions:
+#      - "permission:group.staff"
+#    yes: "<red>[STAFF] "
+
 # Per-group formats (optional). Remove the leading '#' to enable.
 group-formats:
 #  default: "<gray>[User]</gray> {name}<dark_gray> »<reset> {message}"
@@ -81,6 +107,10 @@ emoji:
   enabled: true
   # When true, only players with 'lpc.emoji' get emoji replacement.
   require-permission: false
+  # Hover shown on the inserted glyph, so readers can see how it was typed. <code> becomes the
+  # shortcut it replaced (e.g. ':heart:'). Set to "" for no hover. Paper only - the Spigot chat
+  # event has nowhere to attach one. Applies to configs written before this option existed too.
+  hover-text: "<gray><code>"
   replacements:
     ":heart:": "❤"
     ":star:": "★"
@@ -163,6 +193,27 @@ repeat-filter:
   enabled: true
   expiry-millis: 30000
   message: "<red>Please don't repeat the same message."
+
+# Refuses characters you do not want in chat: symbols the vanilla font cannot draw, combining
+# marks stacked into "zalgo" text, or right-to-left overrides used to scramble a line. Rather than
+# listing what to ban, 'allowed-characters' is a regex character class saying what IS allowed and
+# anything outside it is refused. Bypass with lpc.bypass.characters.
+#
+# Useful values:
+#   "[\\x20-\\x7E]"                printable ASCII only (the default)
+#   "[\\x20-\\x7E\\u00C0-\\u017F]"   ASCII plus accented Latin letters
+#   "[^\\p{Cntrl}\\p{Cf}\\p{Mn}]"      anything except control, formatting and combining
+#                                  characters - looser, but still stops zalgo and RTL overrides
+#
+# Emoji shortcuts are ASCII, so ':heart:' still works on an ASCII-only server: the glyph is
+# substituted after this check runs.
+character-filter:
+  enabled: false
+  allowed-characters: "[\\x20-\\x7E]"
+  # BLOCK (refuse the message) or STRIP (remove the offending characters and send the rest)
+  action: BLOCK
+  # <character> becomes the first character that was refused.
+  message: "<red>That character isn't allowed in chat: <yellow><character></yellow>"
 
 caps-filter:
   enabled: true

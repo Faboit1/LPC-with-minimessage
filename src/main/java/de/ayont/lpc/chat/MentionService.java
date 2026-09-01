@@ -113,16 +113,23 @@ public final class MentionService {
         return matched;
     }
 
-    /** Schedules a ping for every mentioned online player. Safe to call async. */
-    public void pingAll(Set<String> mentioned, String senderName) {
+    /**
+     * Schedules a ping for every mentioned online player who allows it. Safe to call async.
+     *
+     * <p>Each receiver's {@code /allowmentions} setting decides whether the ping reaches them, and
+     * a player who cannot see the message under their own {@code /showchatfrom} is never pinged
+     * about it.</p>
+     */
+    public void pingAll(Set<String> mentioned, Player sender) {
         if (!enabled || mentioned.isEmpty()) {
             return;
         }
         for (String name : mentioned) {
             Player target = plugin.getServer().getPlayerExact(name);
-            if (target != null) {
-                plugin.getScheduler().runOnEntity(target, () -> ping(target, senderName));
+            if (target == null || !plugin.mayMention(target, sender) || !plugin.maySee(sender, target)) {
+                continue;
             }
+            plugin.getScheduler().runOnEntity(target, () -> ping(target, sender.getName()));
         }
     }
 
