@@ -34,6 +34,13 @@ public final class ConditionService {
     /** Names are restricted so a token cannot smuggle in arbitrary text. */
     private static final Pattern TOKEN = Pattern.compile("%condition:([A-Za-z0-9_.-]{1,64})%");
 
+    /**
+     * Same grammar as {@link #TOKEN}, but resolved against the player <em>reading</em> the line
+     * rather than the one who wrote it. Chat is rendered once per viewer, so a format may mix both:
+     * {@code %vcondition:x%} asks about the reader, {@code %condition:x%} about the speaker.
+     */
+    private static final Pattern VIEWER_TOKEN = Pattern.compile("%vcondition:([A-Za-z0-9_.-]{1,64})%");
+
     /** A condition's output may reference other conditions; this caps the nesting. */
     private static final int MAX_DEPTH = 10;
 
@@ -86,10 +93,22 @@ public final class ConditionService {
             parsed.put(name, new Condition(
                     Condition.parseType(entry.getString("type")),
                     subs,
-                    entry.getString("yes", ""),
-                    entry.getString("no", "")));
+                    branch(entry, "yes", "true"),
+                    branch(entry, "no", "false")));
         }
         return Map.copyOf(parsed);
+    }
+
+    /**
+     * Reads a condition branch.
+     *
+     * <p>YAML 1.1 — which SnakeYAML implements — treats bare {@code yes} and {@code no} as booleans,
+     * so an unquoted {@code yes:} key arrives here as {@code "true"}. Both spellings are accepted so
+     * the documented syntax works whether or not the operator quoted the key.</p>
+     */
+    private static String branch(ConfigurationSection entry, String key, String coerced) {
+        String value = entry.getString(key);
+        return value != null ? value : entry.getString(coerced, "");
     }
 
     private static void warn(LPC plugin, String message) {
@@ -105,13 +124,30 @@ public final class ConditionService {
      * use the feature pay nothing for it.</p>
      */
     public String apply(Player player, String text) {
-        if (text == null || conditions.isEmpty() || text.indexOf('%') < 0) {
+        return apply(player, text, TOKEN);
+    }
+
+    /**
+     * Replaces every {@code %vcondition:name%} in {@code text}, resolved against {@code viewer} —
+     * the player who will read the line, not the one who wrote it.
+     *
+     * <p>Run this <em>before</em> the PlaceholderAPI pass, exactly like {@link #apply(Player,
+     * String)}. The reader decides which branch is taken, but any placeholder inside that branch is
+     * still expanded against the speaker afterwards, so
+     * {@code no: "%rank_prefix% "} shows the <em>speaker's</em> rank to readers who left it on.</p>
+     */
+    public String applyViewer(Player viewer, String text) {
+        return apply(viewer, text, VIEWER_TOKEN);
+    }
+
+    private String apply(Player player, String text, Pattern token) {
+        if (player == null || text == null || conditions.isEmpty() || text.indexOf('%') < 0) {
             return text;
         }
         boolean papi = hasPapi;
         UnaryOperator<String> resolve = value ->
                 papi ? PlaceholderAPI.setPlaceholders(player, value) : value;
-        return apply(text, conditions, resolve, player::hasPermission);
+        return apply(text, conditions, resolve, player::hasPermission, MAX_DEPTH, token);
     }
 
     /**
@@ -122,16 +158,16 @@ public final class ConditionService {
      */
     public static String apply(String text, Map<String, Condition> conditions,
                                UnaryOperator<String> resolve, Predicate<String> hasPermission) {
-        return apply(text, conditions, resolve, hasPermission, MAX_DEPTH);
+        return apply(text, conditions, resolve, hasPermission, MAX_DEPTH, TOKEN);
     }
 
     private static String apply(String text, Map<String, Condition> conditions,
                                 UnaryOperator<String> resolve, Predicate<String> hasPermission,
-                                int depthLeft) {
+                                int depthLeft, Pattern token) {
         if (text == null || depthLeft <= 0 || conditions.isEmpty()) {
             return text;
         }
-        Matcher matcher = TOKEN.matcher(text);
+        Matcher matcher = token.matcher(text);
         StringBuilder out = new StringBuilder(text.length());
         boolean found = false;
         while (matcher.find()) {
@@ -147,7 +183,9 @@ public final class ConditionService {
         }
         matcher.appendTail(out);
         // A condition's output may itself name a condition; resolve those too, within the cap.
-        return apply(out.toString(), conditions, resolve, hasPermission, depthLeft - 1);
+        // Nesting stays in the same namespace: a viewer condition's branches may only name other
+        // viewer conditions, so the "who is being asked about" never silently flips mid-resolution.
+        return apply(out.toString(), conditions, resolve, hasPermission, depthLeft - 1, token);
     }
 
     /** An immutable view of the loaded conditions, for tests and diagnostics. */

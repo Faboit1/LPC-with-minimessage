@@ -22,6 +22,11 @@ commands:
     usage: "/allowmentions <friends|all|nobody>"
     aliases: [ mentions ]
     permission: lpc.allowmentions
+  hideranks:
+    description: Hide other players' ranks from your own chat and tab list.
+    usage: "/hideranks <on|off>"
+    aliases: [ hiderank, showranks ]
+    permission: lpc.hideranks
 
 permissions:
   lpc.reload:
@@ -71,6 +76,9 @@ permissions:
     default: true
   lpc.allowmentions:
     description: Allows use of /allowmentions
+    default: true
+  lpc.hideranks:
+    description: Allows use of /hideranks
     default: true
   lpc.bypass.characters:
     description: Exempts a player from the chat character filter

@@ -9,6 +9,7 @@ import de.ayont.lpc.chat.ItemPlaceholder;
 import de.ayont.lpc.chat.MentionService;
 import de.ayont.lpc.chat.UrlLinkifier;
 import de.ayont.lpc.commands.AllowMentionsCommand;
+import de.ayont.lpc.commands.HideRanksCommand;
 import de.ayont.lpc.commands.LPCCommand;
 import de.ayont.lpc.commands.ShowChatFromCommand;
 import de.ayont.lpc.condition.ConditionService;
@@ -49,6 +50,7 @@ public final class LPC extends JavaPlugin {
     private MentionService mentionService;
     private ConditionService conditionService;
     private ChatPreferences chatPreferences;
+    private de.ayont.lpc.chat.RankHidingExpansion rankHidingExpansion;
     private FriendSystemHook friendSystemHook;
 
     public static LegacyComponentSerializer getLegacySerializer() {
@@ -77,6 +79,7 @@ public final class LPC extends JavaPlugin {
         }
         registerCommand();
         registerListeners();
+        registerRankHidingExpansion();
         startUpdateChecker();
         logRuntimePlatform();
     }
@@ -122,8 +125,34 @@ public final class LPC extends JavaPlugin {
         return scheduler;
     }
 
+    /**
+     * Publishes {@code %lpc_hide_ranks%} and the relational {@code %rel_lpc_rank_prefix%} so TAB (or
+     * anything else) can honour the viewer's {@code /hideranks} choice. Optional: without
+     * PlaceholderAPI, chat still works via {@code %vcondition:...%}.
+     */
+    private void registerRankHidingExpansion() {
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) {
+            return;
+        }
+        try {
+            this.rankHidingExpansion = new de.ayont.lpc.chat.RankHidingExpansion(this);
+            if (rankHidingExpansion.register()) {
+                getLogger().info("Registered %lpc_hide_ranks% and relational %rel_lpc_rank_prefix%.");
+            }
+        } catch (Throwable failure) {
+            getLogger().warning("Could not register the LPC placeholder expansion: " + failure.getMessage());
+        }
+    }
+
     @Override
     public void onDisable() {
+        if (rankHidingExpansion != null) {
+            try {
+                rankHidingExpansion.unregister();
+            } catch (Throwable ignored) {
+                // PlaceholderAPI may already be gone during shutdown.
+            }
+        }
         if (chatPreferences != null) {
             // Written inline: the scheduler will not accept new work while disabling.
             chatPreferences.save();
@@ -261,6 +290,7 @@ public final class LPC extends JavaPlugin {
 
         bind("showchatfrom", new ShowChatFromCommand(this));
         bind("allowmentions", new AllowMentionsCommand(this));
+        bind("hideranks", new HideRanksCommand(this));
     }
 
     /** Attaches one of the per-player chat setting commands, if plugin.yml declares it. */

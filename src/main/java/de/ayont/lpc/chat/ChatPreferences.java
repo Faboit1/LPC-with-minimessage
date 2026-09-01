@@ -25,11 +25,12 @@ public final class ChatPreferences {
     private static final String FILE_NAME = "chat-settings.yml";
     private static final String SHOW_CHAT_FROM = "show-chat-from";
     private static final String ALLOW_MENTIONS = "allow-mentions";
+    private static final String HIDE_RANKS = "hide-ranks";
 
     /** One player's settings. Immutable: an update replaces the whole record. */
-    private record Prefs(ChatVisibility visibility, MentionPolicy mentions) {
+    private record Prefs(ChatVisibility visibility, MentionPolicy mentions, boolean hideRanks) {
 
-        static final Prefs DEFAULTS = new Prefs(ChatVisibility.EVERYONE, MentionPolicy.ALL);
+        static final Prefs DEFAULTS = new Prefs(ChatVisibility.EVERYONE, MentionPolicy.ALL, false);
 
         boolean isDefault() {
             return equals(DEFAULTS);
@@ -69,7 +70,8 @@ public final class ChatPreferences {
             MentionPolicy mentions = MentionPolicy.fromKey(entry.getString(ALLOW_MENTIONS));
             Prefs prefs = new Prefs(
                     visibility == null ? Prefs.DEFAULTS.visibility() : visibility,
-                    mentions == null ? Prefs.DEFAULTS.mentions() : mentions);
+                    mentions == null ? Prefs.DEFAULTS.mentions() : mentions,
+                    entry.getBoolean(HIDE_RANKS, Prefs.DEFAULTS.hideRanks()));
             if (!prefs.isDefault()) {
                 players.put(uuid, prefs);
             }
@@ -81,7 +83,17 @@ public final class ChatPreferences {
     }
 
     public void visibility(UUID player, ChatVisibility mode) {
-        update(player, prefs -> new Prefs(mode == null ? Prefs.DEFAULTS.visibility() : mode, prefs.mentions()));
+        update(player, prefs -> new Prefs(mode == null ? Prefs.DEFAULTS.visibility() : mode, prefs.mentions(),
+                prefs.hideRanks()));
+    }
+
+    /** Whether this player has chosen to hide <em>other</em> people's ranks from their own view. */
+    public boolean hideRanks(UUID player) {
+        return players.getOrDefault(player, Prefs.DEFAULTS).hideRanks();
+    }
+
+    public void hideRanks(UUID player, boolean hide) {
+        update(player, prefs -> new Prefs(prefs.visibility(), prefs.mentions(), hide));
     }
 
     public MentionPolicy mentions(UUID player) {
@@ -89,7 +101,8 @@ public final class ChatPreferences {
     }
 
     public void mentions(UUID player, MentionPolicy policy) {
-        update(player, prefs -> new Prefs(prefs.visibility(), policy == null ? Prefs.DEFAULTS.mentions() : policy));
+        update(player, prefs -> new Prefs(prefs.visibility(), policy == null ? Prefs.DEFAULTS.mentions() : policy,
+                prefs.hideRanks()));
     }
 
     private void update(UUID player, java.util.function.UnaryOperator<Prefs> change) {
@@ -113,6 +126,7 @@ public final class ChatPreferences {
             String id = entry.getKey().toString();
             yaml.set(id + "." + SHOW_CHAT_FROM, prefs.visibility().key());
             yaml.set(id + "." + ALLOW_MENTIONS, prefs.mentions().key());
+            yaml.set(id + "." + HIDE_RANKS, prefs.hideRanks());
         }
         File folder = file.getParentFile();
         if (folder != null && !folder.isDirectory() && !folder.mkdirs()) {
