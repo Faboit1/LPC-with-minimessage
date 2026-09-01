@@ -7,6 +7,7 @@ import de.ayont.lpc.chat.EmojiReplacer;
 import de.ayont.lpc.chat.MentionPolicy;
 import de.ayont.lpc.chat.ItemPlaceholder;
 import de.ayont.lpc.chat.MentionService;
+import de.ayont.lpc.chat.RankHidingExpansion;
 import de.ayont.lpc.chat.UrlLinkifier;
 import de.ayont.lpc.commands.AllowMentionsCommand;
 import de.ayont.lpc.commands.HideRanksCommand;
@@ -50,7 +51,7 @@ public final class LPC extends JavaPlugin {
     private MentionService mentionService;
     private ConditionService conditionService;
     private ChatPreferences chatPreferences;
-    private de.ayont.lpc.chat.RankHidingExpansion rankHidingExpansion;
+    private RankHidingExpansion rankHidingExpansion;
     private FriendSystemHook friendSystemHook;
 
     public static LegacyComponentSerializer getLegacySerializer() {
@@ -135,7 +136,7 @@ public final class LPC extends JavaPlugin {
             return;
         }
         try {
-            this.rankHidingExpansion = new de.ayont.lpc.chat.RankHidingExpansion(this);
+            this.rankHidingExpansion = new RankHidingExpansion(this);
             if (rankHidingExpansion.register()) {
                 getLogger().info("Registered %lpc_hide_ranks% and relational %rel_lpc_rank_prefix%.");
             }
