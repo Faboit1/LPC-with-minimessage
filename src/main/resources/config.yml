@@ -26,6 +26,16 @@
 chat-format: "{prefix}{name}<dark_gray> »<reset> {message}"
 
 # ─────────────────────────────────────────────────────────────────────────
+#  Rank hiding — /hideranks lets a player drop other people's rank tags from
+#  their own view. Which placeholder counts as "the rank prefix" is a server
+#  decision, so name it here. Used by the relational %rel_lpc_rank_prefix%
+#  placeholder (for TAB and friends); chat uses %vcondition:...% instead and
+#  does not need this.
+# ─────────────────────────────────────────────────────────────────────────
+rank-hiding:
+  prefix-placeholder: "%rank_prefix%"
+
+# ─────────────────────────────────────────────────────────────────────────
 #  Conditions — make a format change itself based on a placeholder.
 #  Declare a named test here, then use %condition:<name>% in any format.
 #  Full guide with more examples: CONDITIONS.md

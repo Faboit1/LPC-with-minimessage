@@ -40,14 +40,19 @@ public class HideRanksCommand implements CommandExecutor, TabCompleter {
         }
 
         boolean current = plugin.getChatPreferences().hideRanks(player.getUniqueId());
+        // /showranks is an alias, so "on" there has to mean the opposite of "on" under /hideranks -
+        // otherwise '/showranks on' would hide them. 'hide' and 'show' stay absolute either way.
+        boolean inverted = label.toLowerCase(Locale.ROOT).startsWith("show");
         boolean hide;
         if (args.length == 0) {
             hide = !current;
         } else {
             String choice = args[0].toLowerCase(Locale.ROOT);
             switch (choice) {
-                case "on", "true", "yes", "hide" -> hide = true;
-                case "off", "false", "no", "show" -> hide = false;
+                case "hide" -> hide = true;
+                case "show" -> hide = false;
+                case "on", "true", "yes" -> hide = !inverted;
+                case "off", "false", "no" -> hide = inverted;
                 default -> {
                     plugin.send(player, MM.deserialize(
                             "<red>Unknown option '<white><given></white>'. Use <white>on</white> or "

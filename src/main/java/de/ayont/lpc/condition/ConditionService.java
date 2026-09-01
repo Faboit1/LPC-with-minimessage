@@ -32,17 +32,17 @@ import java.util.regex.Pattern;
 public final class ConditionService {
 
     /** Names are restricted so a token cannot smuggle in arbitrary text. */
-    private static final Pattern TOKEN = Pattern.compile("%condition:([A-Za-z0-9_.-]{1,64})%");
+    static final Pattern TOKEN = Pattern.compile("%condition:([A-Za-z0-9_.-]{1,64})%");
 
     /**
      * Same grammar as {@link #TOKEN}, but resolved against the player <em>reading</em> the line
      * rather than the one who wrote it. Chat is rendered once per viewer, so a format may mix both:
      * {@code %vcondition:x%} asks about the reader, {@code %condition:x%} about the speaker.
      */
-    private static final Pattern VIEWER_TOKEN = Pattern.compile("%vcondition:([A-Za-z0-9_.-]{1,64})%");
+    static final Pattern VIEWER_TOKEN = Pattern.compile("%vcondition:([A-Za-z0-9_.-]{1,64})%");
 
     /** A condition's output may reference other conditions; this caps the nesting. */
-    private static final int MAX_DEPTH = 10;
+    static final int MAX_DEPTH = 10;
 
     private final LPC plugin;
     private volatile Map<String, Condition> conditions = Map.of();
@@ -161,9 +161,10 @@ public final class ConditionService {
         return apply(text, conditions, resolve, hasPermission, MAX_DEPTH, TOKEN);
     }
 
-    private static String apply(String text, Map<String, Condition> conditions,
-                                UnaryOperator<String> resolve, Predicate<String> hasPermission,
-                                int depthLeft, Pattern token) {
+    /** Package-private so tests can drive either namespace directly. */
+    static String apply(String text, Map<String, Condition> conditions,
+                        UnaryOperator<String> resolve, Predicate<String> hasPermission,
+                        int depthLeft, Pattern token) {
         if (text == null || depthLeft <= 0 || conditions.isEmpty()) {
             return text;
         }
