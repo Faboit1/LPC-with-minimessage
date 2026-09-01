@@ -60,7 +60,12 @@ public class AsyncChatListener implements Listener {
 
         Component finalMessage = mention.message();
         Component displayName = plugin.displayNameOf(player);
-        event.renderer((source, sourceDisplayName, message, viewer) ->
-                ItemPlaceholder.apply(plugin, source, service.render(source, finalMessage, displayName), true));
+        // The renderer runs once per viewer, so %vcondition:...% can differ per reader.
+        event.renderer((source, sourceDisplayName, message, viewer) -> ItemPlaceholder.apply(
+                plugin,
+                source,
+                service.render(source, finalMessage, displayName,
+                        viewer instanceof Player watcher ? watcher : null),
+                true));
     }
 }

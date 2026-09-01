@@ -123,6 +123,20 @@ public final class ChatFormatService {
      * @return the fully rendered chat line
      */
     public Component render(Player source, Component message, Component displayName) {
+        return render(source, message, displayName, null);
+    }
+
+    /**
+     * Renders the chat line as {@code viewer} should see it.
+     *
+     * <p>Everything except {@code %vcondition:name%} resolves against {@code source}, so the line is
+     * the speaker's — the viewer only decides which branch of a viewer condition is taken. Pass
+     * {@code null} (or the source) on paths that render once for the whole audience, such as the
+     * legacy Spigot listener; viewer conditions then fall back to the speaker.
+     *
+     * @param viewer the player who will read this line, or {@code null} for a shared render
+     */
+    public Component render(Player source, Component message, Component displayName, Player viewer) {
         CachedMetaData metaData = luckPerms.getPlayerAdapter(Player.class).getMetaData(source);
         String group = metaData.getPrimaryGroup();
         if (group == null) {
@@ -141,8 +155,11 @@ public final class ChatFormatService {
         format = applyMetaTokens(format, source, metaData, safeDisplayName);
 
         // Conditions resolve before PlaceholderAPI so placeholders inside a condition's yes/no
-        // text are still expanded by the pass below.
+        // text are still expanded by the pass below. Viewer conditions ask the reader instead of
+        // the speaker, but their output still goes through the speaker's PlaceholderAPI pass — that
+        // is what lets a reader hide the *speaker's* %rank_prefix%.
         format = plugin.getConditionService().apply(source, format);
+        format = plugin.getConditionService().applyViewer(viewer != null ? viewer : source, format);
 
         if (hasPapi) {
             format = PlaceholderAPI.setPlaceholders(source, format);

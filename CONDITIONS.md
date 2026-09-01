@@ -23,9 +23,37 @@ chat-format: "%condition:example%%rank_prefix% <gray>| <white>{name}<dark_gray> 
 Players in the nether get `[NETHER]` in front of their rank; everyone else gets nothing, because
 `no` is an empty string.
 
+## Viewer conditions
+
+`%condition:name%` asks about the player who **wrote** the line. `%vcondition:name%` asks about the
+player who is **reading** it. Chat is rendered once per viewer, so a single format may use both.
+
+The branch a viewer condition picks is chosen using the reader's placeholders, but the text inside
+that branch is still expanded against the speaker. That split is the whole point: it lets a reader
+hide something belonging to the speaker.
+
+```
+conditions:
+  ranks:
+    conditions:
+      - "%lpc_hide_ranks%=true"
+    "yes": ""
+    "no": "%rank_prefix% <gray>| "
+
+chat-format: "%vcondition:ranks%<white>{name}<dark_gray> »<reset> {message}"
+```
+
+Here `%lpc_hide_ranks%` is read for the viewer, while `%rank_prefix%` in the `no` branch still
+resolves to the *speaker's* rank. Readers who ran `/hideranks on` see a clean `Name » message`.
+
+Viewer conditions only apply where a viewer exists — the Paper chat listener. On the legacy Spigot
+listener, which renders one line for the whole audience, they fall back to the speaker. Nesting
+stays inside one namespace: a viewer condition's branches may only name other viewer conditions.
+
 ## Where you can use them
 
-`%condition:name%` works in every operator-authored format:
+`%condition:name%` works in every operator-authored format (and `%vcondition:name%` in the chat
+formats, which are the ones with a viewer):
 
 - `chat-format`
 - `group-formats` and `track-formats`
@@ -54,6 +82,11 @@ Names may contain letters, digits, `_`, `.` and `-`.
 
 Both `yes` and `no` default to an empty string, so you can leave one out when you only want output
 in one case.
+
+> **Note on `yes` / `no`.** YAML 1.1 — which the config loader uses — reads bare `yes` and `no` as
+> booleans, so they arrive as the keys `true` and `false`. LPC accepts either spelling, so
+> `yes:`, `"yes":` and `true:` all work. If you are hand-editing a config written by an older
+> build, quoting the keys is the safest choice.
 
 ## Operators
 
