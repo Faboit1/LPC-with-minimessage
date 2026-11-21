@@ -109,4 +109,83 @@ class TextChecksTest {
         assertEquals("hi ", TextChecks.stripDisallowed("hi \u2764", ASCII));
         assertEquals("Hello!", TextChecks.stripDisallowed("Hello!", ASCII));
     }
+
+    // ----- regex filter -----
+
+    private static List<Pattern> rx(String... sources) {
+        return TextChecks.compileRegexes(List.of(sources), (source, reason) -> {
+            throw new AssertionError("unexpected invalid regex " + source + ": " + reason);
+        });
+    }
+
+    @Test
+    @DisplayName("regex filter hits the word but never words that merely contain it")
+    void regex_wordBoundaries() {
+        List<Pattern> p = rx("(?<![a-z])ass(?![a-z])", "(?<![a-z0-9])f[u*]ck");
+        assertTrue(TextChecks.matchesAnyRegex("you ass", p));
+        assertTrue(TextChecks.matchesAnyRegex("YOU ARE AN ASS!", p));
+        assertTrue(TextChecks.matchesAnyRegex("f*ck", p));
+        for (String fine : new String[] {"classic", "assassin", "assume", "embassy", "bass guitar", "Hello"}) {
+            assertFalse(TextChecks.matchesAnyRegex(fine, p), fine);
+        }
+    }
+
+    @Test
+    @DisplayName("cleanForRegex strips colour codes, invisibles, fullwidth letters and long runs")
+    void cleanForRegex_normalises() {
+        assertEquals("fuck", TextChecks.cleanForRegex("f&cuck"));
+        assertEquals("fuck", TextChecks.cleanForRegex("f\u00a7cu\u200bck"));
+        assertEquals("fuck", TextChecks.cleanForRegex("\uff46\uff55\uff43\uff4b"));
+        assertEquals("fuuck", TextChecks.cleanForRegex("fuuuuuuuuuck"));
+        assertEquals("shit", TextChecks.cleanForRegex("shit"));
+        assertEquals("", TextChecks.cleanForRegex(null));
+    }
+
+    @Test
+    @DisplayName("a bad or empty-matching regex is skipped, the good ones still load")
+    void compileRegexes_skipsBadEntries() {
+        List<String> rejected = new java.util.ArrayList<>();
+        List<Pattern> loaded = TextChecks.compileRegexes(
+                List.of("(unclosed", "a*", "", "  ", "badword"), (source, reason) -> rejected.add(source));
+        assertEquals(1, loaded.size());
+        assertEquals(List.of("(unclosed", "a*"), rejected);
+        assertTrue(TextChecks.matchesAnyRegex("a BADWORD here", loaded));
+    }
+
+    @Test
+    @DisplayName("maskRegexMatches masks each match with the mask char, original case untouched elsewhere")
+    void maskRegexMatches_masks() {
+        List<Pattern> p = rx("(?<![a-z])ass(?![a-z])");
+        assertEquals("Hello *** and classic", TextChecks.maskRegexMatches("Hello ass and classic", p, '*'));
+        assertEquals("### ###", TextChecks.maskRegexMatches("ASS ass", p, '#'));
+    }
+
+    @Test
+    @DisplayName("long messages are scanned in windows without missing a word at the end or on a seam")
+    void firstRegexMatch_scansWholeLongText() {
+        List<Pattern> p = rx("(?<![a-z])badword(?![a-z])");
+        String filler = "x ".repeat(400);
+        assertEquals("badword", TextChecks.firstRegexMatch(filler + "badword", p));
+        String seam = "y".repeat(500) + " badword " + filler;
+        assertEquals("badword", TextChecks.firstRegexMatch(seam, p));
+        assertEquals(null, TextChecks.firstRegexMatch(filler, p));
+    }
+
+    @Test
+    @DisplayName("the generated all-language regex file blocks swearing (incl. Russian plurals) and spares real words")
+    void generatedRegexFile_endToEnd() throws Exception {
+        java.io.InputStream in = getClass().getResourceAsStream("/profanity-regex-sample.txt");
+        org.junit.jupiter.api.Assumptions.assumeTrue(in != null, "sample regex not bundled");
+        String source = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.US_ASCII).trim();
+        List<Pattern> p = rx(source);
+        for (String bad : new String[] {"fuck you", "sh1t", "a$$hole", "f.u.c.k", "b1tch", "f*ck", "fuuuuck", "kuk", "f&cuck",
+                "\u0432\u0441\u0435 \u0448\u043b\u044e\u0445\u0438", "\u0445\u0435\u043b\u043e\u0443 \u043f\u0438\u0434\u043e\u0440\u0438", "n1gg3r"}) {
+            assertTrue(TextChecks.matchesAnyRegex(TextChecks.cleanForRegex(bad), p), bad);
+        }
+        for (String good : new String[] {"classic", "assassin", "Scunthorpe", "cockpit", "peacock", "diamond hoe",
+                "he's hit me", "5 hits", "document", "Fukushima", "Hello world",
+                "\u0448\u043b\u044e\u0437", "\u0445\u043b\u0435\u0431", "\u043f\u0440\u0438\u0432\u0435\u0442 \u043a\u0430\u043a \u0434\u0435\u043b\u0430"}) {
+            assertFalse(TextChecks.matchesAnyRegex(TextChecks.cleanForRegex(good), p), good);
+        }
+    }
 }

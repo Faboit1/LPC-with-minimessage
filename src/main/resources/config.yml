@@ -237,7 +237,17 @@ profanity-filter:
   enabled: false
   # BLOCK or MASK
   action: MASK
+  # Plain words, matched anywhere inside a message after l33t/spacing/repeats are folded. Simple, but
+  # short words here also hit innocent ones ("ass" in "classic"). Prefer regexes for those.
   words: []
+  # Regular expressions (Java syntax, case-insensitive). A message is refused/masked when any of them
+  # matches. Anchor words with lookarounds, e.g. (?<![a-z])ass(?![a-z]), so real words are never hit.
+  # Invalid entries are skipped with a warning in the console instead of breaking the filter.
+  regex: []
+  # Files in plugins/LPC/ holding one regex per line (blank lines and lines starting with # ignored).
+  # Lets you drop in a big generated pattern instead of pasting it into this file.
+  # Run /lpc reload after editing, and /lpc filtertest <message> to try a message against the filter.
+  regex-files: []
   mask-char: "*"
   message: "<red>Watch your language."
 

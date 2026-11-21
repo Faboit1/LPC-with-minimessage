@@ -15,7 +15,7 @@ import java.util.List;
 
 public class LPCCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = List.of("reload", "version", "help", "mute", "unmute");
+    private static final List<String> SUBCOMMANDS = List.of("reload", "version", "help", "mute", "unmute", "filtertest");
     private static final List<String> TARGET_SUBCOMMANDS = List.of("mute", "unmute");
     private static final MiniMessage MM = MiniMessage.miniMessage();
 
@@ -36,6 +36,7 @@ public class LPCCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase()) {
             case "reload" -> handleReload(sender);
             case "version" -> handleVersion(sender);
+            case "filtertest" -> handleFilterTest(sender, args);
             case "mute" -> handleMute(sender, args);
             case "unmute" -> handleUnmute(sender, args);
             default -> sendHelp(sender);
@@ -79,6 +80,21 @@ public class LPCCommand implements CommandExecutor, TabCompleter {
             // missing/unreadable build info is non-fatal
         }
         return props;
+    }
+
+    /** {@code /lpc filtertest <text>}: shows what the profanity filter would do, for tuning regexes. */
+    private void handleFilterTest(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lpc.reload")) {
+            plugin.send(sender, mini("<red>You don't have permission to do that."));
+            return;
+        }
+        if (args.length < 2) {
+            plugin.send(sender, mini("<red>Usage: /lpc filtertest <message>"));
+            return;
+        }
+        String message = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
+        plugin.send(sender, mini("<gray>[filtertest] <white><result></white>", "result",
+                plugin.getModerationService().describeProfanity(message)));
     }
 
     private void handleMute(CommandSender sender, String[] args) {
@@ -127,6 +143,9 @@ public class LPCCommand implements CommandExecutor, TabCompleter {
         plugin.send(sender, mini("<gradient:#B754F4:#FC00FF>LPC</gradient> <gray>commands:"));
         plugin.send(sender, mini("<dark_gray>- <white>/lpc reload</white> <dark_gray>» <gray>Reload the configuration"));
         plugin.send(sender, mini("<dark_gray>- <white>/lpc version</white> <dark_gray>» <gray>Show the plugin version"));
+        if (sender.hasPermission("lpc.reload")) {
+            plugin.send(sender, mini("<dark_gray>- <white>/lpc filtertest <message></white> <dark_gray>» <gray>Test the profanity filter"));
+        }
         if (plugin.getMuteService().areCommandsEnabled()) {
             plugin.send(sender, mini("<dark_gray>- <white>/lpc mute <player> [duration]</white> <dark_gray>» <gray>Mute a player"));
             plugin.send(sender, mini("<dark_gray>- <white>/lpc unmute <player></white> <dark_gray>» <gray>Unmute a player"));

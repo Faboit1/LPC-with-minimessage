@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Regex profanity filter.** `profanity-filter.regex` (inline list) and `profanity-filter.regex-files`
+  (files in the plugin folder, one expression per line) take Java regular expressions alongside `words`.
+  Messages are cleaned first (colour codes, zero-width/control characters, NFKC fullwidth folding, runs of
+  4+ identical characters squeezed), then matched in 512-char windows. `MASK` masks every match; when a
+  word only matches after cleaning it falls back to `BLOCK`.
+- `/lpc filtertest <message>` (permission `lpc.reload`) prints the filter's verdict and the exact match.
+- Invalid or empty-matching expressions are skipped with a console warning rather than failing the filter.
+
 ## 4.1.0
 
 **Released:** 2026-06-16  

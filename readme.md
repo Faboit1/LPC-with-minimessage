@@ -65,7 +65,7 @@ against an Adventure 5 runtime — the exact thing a Paper 26.2 server does.
 - **Clickable links** – URLs become `openUrl` links on Paper, coloured on Spigot
 
 **Moderation** *(off by default)*
-- Anti-spam cooldown, repeated-message blocker, caps filter, profanity mask, anti-advertising
+- Anti-spam cooldown, repeated-message blocker, caps filter, profanity mask (plain words **and regular expressions**), anti-advertising
 - Per-player **mute** (`/lpc mute`) + LuckPerms mute node for punishment plugins
 
 **Server messages** *(off by default)*
@@ -86,8 +86,33 @@ against an Adventure 5 runtime — the exact thing a Paper 26.2 server does.
 | `/lpc reload` | `lpc.reload` | Reload the configuration |
 | `/lpc version` | – | Show the installed version |
 | `/lpc help` | – | List available commands |
+| `/lpc filtertest <message>` | `lpc.reload` | Show what the profanity filter would do with a message (regex tuning) |
 | `/lpc mute <player> [duration]` | `lpc.mute` | Mute a player (e.g. `10m`, `2h`; omit for permanent) |
 | `/lpc unmute <player>` | `lpc.mute` | Unmute a player |
+
+---
+
+## 🔍 Regex profanity filter
+
+`profanity-filter` accepts regular expressions next to the plain `words` list:
+
+```yaml
+profanity-filter:
+  enabled: true
+  action: MASK            # or BLOCK
+  regex:                  # inline, one expression per entry
+    - '(?<![a-z])ass(?![a-z])'
+  regex-files:            # files in plugins/LPC/, one expression per line (# = comment)
+    - profanity-regex.txt
+```
+
+- Expressions are Java regexes, compiled case-insensitively; a bad entry only logs a warning.
+- Matching runs on a cleaned copy of the message (colour codes, invisible characters, fullwidth letters
+  removed; long letter runs squeezed), so hidden characters cannot split a word.
+- `MASK` replaces each match with `mask-char`; if the word is only recognisable after cleaning (so it can't
+  be masked in place) the message is blocked instead.
+- `/lpc filtertest <message>` shows the verdict and the exact match, from console or in game.
+- Anything over `moderation.enabled`/`profanity-filter.enabled` switches and `lpc.bypass.profanity` applies as before.
 
 ---
 

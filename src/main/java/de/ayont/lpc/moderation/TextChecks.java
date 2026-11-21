@@ -1,9 +1,14 @@
 package de.ayont.lpc.moderation;
 
+import java.text.Normalizer;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * Pure (Bukkit-free) text analysis used by {@link ModerationService}. Every method operates on raw
@@ -17,6 +22,17 @@ public final class TextChecks {
             "(?i)(?:https?://)?(?:[a-z0-9-]+\\.)+[a-z]{2,}(?:/\\S*)?");
     private static final Pattern IP = Pattern.compile(
             "(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{1,5})?");
+
+    /** Legacy colour/format codes ({@code &c}, {@code §l}); players use them to split a word in two. */
+    private static final Pattern LEGACY_CODES = Pattern.compile("(?i)[&\u00a7][0-9a-fk-or]");
+    /** Four or more of the same character in a row; keeps real double letters ("ass", "shit"). */
+    private static final Pattern LONG_RUN = Pattern.compile("(.)\\1{3,}", Pattern.DOTALL);
+    /** Zero-width, bidi and other invisible formatting characters, plus control characters. */
+    private static final Pattern INVISIBLES = Pattern.compile("[\\p{Cf}\\p{Cc}]");
+
+    /** Regexes are matched in windows of this size so one huge message cannot make a match slow. */
+    private static final int REGEX_WINDOW = 512;
+    private static final int REGEX_OVERLAP = 64;
 
     private TextChecks() {
     }
@@ -194,5 +210,96 @@ public final class TextChecks {
             index += Character.charCount(codePoint);
         }
         return kept.toString();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    //  Regex word filter
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Compiles admin-written regular expressions for the profanity filter, case-insensitively and
+     * Unicode-aware. Bad entries are reported through {@code onInvalid(source, reason)} and skipped, so
+     * one typo can never take the whole filter (or the plugin) down. An expression that matches the
+     * empty string is rejected too: it would "match" every message and silence the whole chat.
+     */
+    public static List<Pattern> compileRegexes(Collection<String> sources, BiConsumer<String, String> onInvalid) {
+        List<Pattern> compiled = new ArrayList<>();
+        for (String source : sources) {
+            if (source == null || source.isBlank()) {
+                continue;
+            }
+            try {
+                Pattern pattern = Pattern.compile(source, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+                if (pattern.matcher("").find()) {
+                    onInvalid.accept(source, "it matches the empty string, which would block every message");
+                    continue;
+                }
+                compiled.add(pattern);
+            } catch (PatternSyntaxException invalid) {
+                onInvalid.accept(source, invalid.getDescription());
+            } catch (StackOverflowError tooComplex) {
+                onInvalid.accept(source, "the expression is too complex");
+            }
+        }
+        return List.copyOf(compiled);
+    }
+
+    /**
+     * Cleans a message for regex detection only (never for display): drops colour codes, invisible
+     * characters and control characters, folds fullwidth / stylised letters to plain ones (NFKC), and
+     * squeezes any run of four or more identical characters down to two so "fuuuuuuuuuck" and
+     * thousand-letter spam are cheap to match.
+     */
+    public static String cleanForRegex(String input) {
+        if (input == null || input.isEmpty()) {
+            return "";
+        }
+        String text = LEGACY_CODES.matcher(input).replaceAll("");
+        text = Normalizer.normalize(text, Normalizer.Form.NFKC);
+        text = INVISIBLES.matcher(text).replaceAll("");
+        return LONG_RUN.matcher(text).replaceAll("$1$1");
+    }
+
+    /** @return the first match of any pattern in {@code text}, or {@code null} when none matches. */
+    public static String firstRegexMatch(String text, List<Pattern> patterns) {
+        if (text == null || text.isEmpty() || patterns.isEmpty()) {
+            return null;
+        }
+        for (int start = 0; ; start += REGEX_WINDOW - REGEX_OVERLAP) {
+            int end = Math.min(text.length(), start + REGEX_WINDOW);
+            CharSequence window = text.subSequence(start, end);
+            for (Pattern pattern : patterns) {
+                Matcher matcher = pattern.matcher(window);
+                if (matcher.find() && matcher.end() > matcher.start()) {
+                    return matcher.group();
+                }
+            }
+            if (end >= text.length()) {
+                return null;
+            }
+        }
+    }
+
+    /** @return true if any pattern matches {@code text}. */
+    public static boolean matchesAnyRegex(String text, List<Pattern> patterns) {
+        return firstRegexMatch(text, patterns) != null;
+    }
+
+    /** Replaces every regex match in the original text with {@code maskChar} repeated to its length. */
+    public static String maskRegexMatches(String original, List<Pattern> patterns, char maskChar) {
+        String result = original;
+        for (Pattern pattern : patterns) {
+            Matcher matcher = pattern.matcher(result);
+            StringBuilder sb = new StringBuilder();
+            while (matcher.find()) {
+                int length = matcher.end() - matcher.start();
+                matcher.appendReplacement(sb, length == 0
+                        ? ""
+                        : Matcher.quoteReplacement(String.valueOf(maskChar).repeat(length)));
+            }
+            matcher.appendTail(sb);
+            result = sb.toString();
+        }
+        return result;
     }
 }

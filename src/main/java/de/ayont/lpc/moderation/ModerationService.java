@@ -6,6 +6,11 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.entity.Player;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,6 +57,7 @@ public final class ModerationService {
     private volatile boolean profanityBlock;
     private volatile List<String> profanityWords;
     private volatile List<String> profanityNormalized;
+    private volatile List<Pattern> profanityRegexes = List.of();
     private volatile char profanityMaskChar;
     private volatile String profanityMessage;
     private volatile boolean advertEnabled;
@@ -95,6 +101,8 @@ public final class ModerationService {
         this.profanityBlock = "BLOCK".equalsIgnoreCase(config.getString("profanity-filter.action", "MASK"));
         this.profanityWords = List.copyOf(config.getStringList("profanity-filter.words"));
         this.profanityNormalized = this.profanityWords.stream().map(TextChecks::normalize).toList();
+        this.profanityRegexes = loadProfanityRegexes(config.getStringList("profanity-filter.regex"),
+                config.getStringList("profanity-filter.regex-files"));
         String maskChar = config.getString("profanity-filter.mask-char", "*");
         this.profanityMaskChar = maskChar.isEmpty() ? '*' : maskChar.charAt(0);
         this.profanityMessage = config.getString("profanity-filter.message", "<red>Watch your language.");
@@ -169,12 +177,22 @@ public final class ModerationService {
             text = text.toLowerCase(Locale.ROOT);
         }
 
-        if (profanityEnabled && !player.hasPermission("lpc.bypass.profanity")
-                && TextChecks.containsAny(TextChecks.normalize(text), profanityNormalized)) {
-            if (profanityBlock) {
-                return ModResult.block(notice(profanityMessage));
+        if (profanityEnabled && !player.hasPermission("lpc.bypass.profanity")) {
+            String cleaned = TextChecks.cleanForRegex(text);
+            boolean regexHit = TextChecks.matchesAnyRegex(cleaned, profanityRegexes);
+            boolean wordHit = TextChecks.containsAny(TextChecks.normalize(text), profanityNormalized);
+            if (regexHit || wordHit) {
+                if (profanityBlock) {
+                    return ModResult.block(notice(profanityMessage));
+                }
+                String masked = TextChecks.maskRegexMatches(text, profanityRegexes, profanityMaskChar);
+                if (regexHit && TextChecks.matchesAnyRegex(TextChecks.cleanForRegex(masked), profanityRegexes)) {
+                    // The regex only recognises the word after cleaning (hidden colour codes, invisible or
+                    // fullwidth characters), so masking the raw text cannot remove it: refuse instead.
+                    return ModResult.block(notice(profanityMessage));
+                }
+                text = TextChecks.maskWords(masked, profanityWords, profanityMaskChar);
             }
-            text = TextChecks.maskWords(text, profanityWords, profanityMaskChar);
         }
 
         if (advertEnabled && !player.hasPermission("lpc.bypass.advert")
@@ -186,6 +204,77 @@ public final class ModerationService {
         }
 
         return text.equals(raw) ? ModResult.allow() : ModResult.transform(text);
+    }
+
+    /**
+     * Describes what the profanity filter makes of {@code message}, ignoring bypass permissions and the
+     * per-filter switches. Backs {@code /lpc filtertest} so admins can try a regex from the console.
+     */
+    public String describeProfanity(String message) {
+        String cleaned = TextChecks.cleanForRegex(message);
+        String regex = TextChecks.firstRegexMatch(cleaned, profanityRegexes);
+        boolean word = TextChecks.containsAny(TextChecks.normalize(message), profanityNormalized);
+        if (regex == null && !word) {
+            return "ALLOWED - no regex (" + profanityRegexes.size() + " loaded) or word matched";
+        }
+        String hit = regex != null ? "regex matched \"" + regex + "\"" : "a blocked word matched";
+        if (profanityBlock) {
+            return "BLOCKED - " + hit;
+        }
+        String masked = TextChecks.maskRegexMatches(message, profanityRegexes, profanityMaskChar);
+        if (regex != null && TextChecks.matchesAnyRegex(TextChecks.cleanForRegex(masked), profanityRegexes)) {
+            return "BLOCKED - " + hit + " (cannot be masked in place)";
+        }
+        return "MASKED - " + hit + " -> " + TextChecks.maskWords(masked, profanityWords, profanityMaskChar);
+    }
+
+    /** @return how many regular expressions the profanity filter currently has loaded. */
+    public int profanityRegexCount() {
+        return profanityRegexes.size();
+    }
+
+    /**
+     * Gathers regexes from the inline {@code profanity-filter.regex} list and from each file named in
+     * {@code profanity-filter.regex-files} (inside the plugin folder; one expression per line, blank lines
+     * and lines starting with {@code #} ignored). A bad entry or missing file only logs a warning.
+     */
+    private List<Pattern> loadProfanityRegexes(List<String> inline, List<String> files) {
+        List<String> sources = new ArrayList<>(inline);
+        Path dataFolder = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
+        int fileCount = 0;
+        for (String name : files) {
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            Path file = dataFolder.resolve(name.trim()).normalize();
+            if (!file.startsWith(dataFolder)) {
+                plugin.getLogger().warning("profanity-filter.regex-files: '" + name + "' is outside the plugin folder - skipped.");
+                continue;
+            }
+            if (!Files.isRegularFile(file)) {
+                plugin.getLogger().warning("profanity-filter.regex-files: '" + name + "' was not found in " + dataFolder + " - skipped.");
+                continue;
+            }
+            try {
+                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                    String trimmed = line.strip();
+                    if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
+                        sources.add(trimmed);
+                    }
+                }
+                fileCount++;
+            } catch (IOException unreadable) {
+                plugin.getLogger().warning("profanity-filter.regex-files: could not read '" + name + "': " + unreadable.getMessage());
+            }
+        }
+        List<Pattern> compiled = TextChecks.compileRegexes(sources, (source, reason) ->
+                plugin.getLogger().warning("profanity-filter: ignoring an invalid regex (" + reason + "): "
+                        + (source.length() > 60 ? source.substring(0, 60) + "..." : source)));
+        if (!compiled.isEmpty()) {
+            plugin.getLogger().info("Profanity filter: loaded " + compiled.size() + " regex pattern(s) ("
+                    + inline.size() + " inline, " + fileCount + " file(s)).");
+        }
+        return compiled;
     }
 
     /** Printable ASCII: the range the default Minecraft font is guaranteed to render. */
